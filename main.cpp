@@ -1,99 +1,186 @@
 #include <iostream>
+#include "binary_converter.h"
 
-void print32Bits(unsigned long long value)
+void printBits(unsigned long long value, int width)
 {
-    for (int bit = 31; bit >= 0; --bit)
+    for (int bit = width - 1; bit >= 0; --bit)
     {
         std::cout << ((value >> bit) & 1ULL);
 
         if (bit > 0 && bit % 8 == 0)
+        {
             std::cout << ' ';
+        }
     }
 }
 
-int main()
+void printHex(unsigned long long value, int width)
 {
-    char choice = '1';
+    const char digits[] = "0123456789ABCDEF";
 
-    while (choice != '2')
+    for (int shift = width - 4; shift >= 0; shift -= 4)
     {
-        std::cout << "\n1. Convert an integer\n";
-        std::cout << "2. Exit\n";
-        std::cout << "Enter your choice: ";
-        std::cin >> choice;
+        int digit = static_cast<int>((value >> shift) & 0xFULL);
+        std::cout << digits[digit];
+    }
+}
+
+bool parseInteger(const char text[], long long& number)
+{
+    int index = 0;
+    bool negative = false;
+
+    if (text[index] == '+' || text[index] == '-')
+    {
+        negative = text[index] == '-';
+        ++index;
+    }
+
+    if (text[index] == '\0')
+    {
+        return false;
+    }
+
+    unsigned long long value = 0;
+
+    while (text[index] != '\0')
+    {
+        if (text[index] < '0' || text[index] > '9')
+        {
+            return false;
+        }
+
+        value = value * 10ULL +
+                static_cast<unsigned long long>(text[index] - '0');
+
+        // No supported mode accepts a magnitude greater than 2^31.
+        if (value > 2147483648ULL)
+        {
+            return false;
+        }
+
+        ++index;
+    }
+
+    if (negative)
+    {
+        number = -static_cast<long long>(value);
+    }
+    else
+    {
+        number = static_cast<long long>(value);
+    }
+
+    return true;
+}
+
+int readWidth()
+{
+    int width = 0;
+
+    while (!isSupportedWidth(width))
+    {
+        std::cout << "Choose a bit width (8, 16, or 32): ";
+        std::cin >> width;
 
         if (!std::cin)
         {
             std::cin.clear();
             std::cin.ignore(10000, '\n');
-            std::cout << "Invalid menu input.\n";
-            continue;
-        }
-
-        if (choice == '1')
-        {
-            long long number;
-
-            std::cout << "Enter an integer from -2147483648 to 2147483647: ";
-            std::cin >> number;
-
-            if (!std::cin)
-            {
-                std::cin.clear();
-                std::cin.ignore(10000, '\n');
-                std::cout << "Invalid integer input.\n";
-                continue;
-            }
-
-            if (number < -2147483648LL || number > 2147483647LL)
-            {
-                std::cout << "The integer is outside the 32-bit range.\n";
-                continue;
-            }
-
-            unsigned long long magnitude;
-
-            if (number < 0)
-                magnitude = static_cast<unsigned long long>(-number);
-            else
-                magnitude = static_cast<unsigned long long>(number);
-
-            std::cout << "\nSigned magnitude: ";
-
-            if (number == -2147483648LL)
-            {
-                std::cout << "not representable in 32-bit signed magnitude";
-            }
-            else
-            {
-                unsigned long long signedMagnitude = magnitude;
-
-                if (number < 0)
-                    signedMagnitude |= (1ULL << 31);
-
-                print32Bits(signedMagnitude);
-            }
-
-            unsigned long long twosComplement;
-
-            if (number < 0)
-                twosComplement = (1ULL << 32) - magnitude;
-            else
-                twosComplement = magnitude;
-
-            std::cout << "\nTwo's complement: ";
-            print32Bits(twosComplement);
-            std::cout << '\n';
-        }
-        else if (choice == '2')
-        {
-            std::cout << "Program ended.\n";
+            width = 0;
         }
         else
         {
-            std::cout << "Invalid choice. Please enter 1 or 2.\n";
+            std::cin.ignore(10000, '\n');
+        }
+
+        if (!isSupportedWidth(width))
+        {
+            std::cout << "Please enter 8, 16, or 32.\n";
         }
     }
 
+    return width;
+}
+
+int main()
+{
+    std::cout << "Signed-Magnitude and Two's-Complement Converter\n";
+    std::cout << "Only integers that fit the selected width are accepted.\n\n";
+
+    int width = readWidth();
+    char input[64];
+
+    while (true)
+    {
+        std::cout << "\nEnter an integer";
+        std::cout << " (" << minimumValue(width)
+                  << " to " << maximumValue(width) << ")";
+        std::cout << ", w to change width, or q to quit: ";
+        std::cin.getline(input, 64);
+
+        if (!std::cin)
+        {
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+            std::cout << "Input is too long. Please try again.\n";
+            continue;
+        }
+
+        if ((input[0] == 'q' || input[0] == 'Q') && input[1] == '\0')
+        {
+            break;
+        }
+
+        if ((input[0] == 'w' || input[0] == 'W') && input[1] == '\0')
+        {
+            width = readWidth();
+            continue;
+        }
+
+        long long number;
+
+        if (!parseInteger(input, number))
+        {
+            std::cout << "Invalid input. Enter a whole number, w, or q.\n";
+            continue;
+        }
+
+        if (!fitsTwosComplement(number, width))
+        {
+            std::cout << number << " does not fit in a signed "
+                      << width << "-bit value.\n";
+            continue;
+        }
+
+        unsigned long long twosComplement =
+            toTwosComplement(number, width);
+        unsigned long long signedMagnitude = 0;
+        bool signedMagnitudeExists =
+            toSignedMagnitude(number, width, signedMagnitude);
+
+        std::cout << "\nDecimal:          " << number << '\n';
+
+        std::cout << "Signed magnitude: ";
+        if (signedMagnitudeExists)
+        {
+            printBits(signedMagnitude, width);
+            std::cout << "  (0x";
+            printHex(signedMagnitude, width);
+            std::cout << ")\n";
+        }
+        else
+        {
+            std::cout << "not representable in " << width << " bits\n";
+        }
+
+        std::cout << "Two's complement: ";
+        printBits(twosComplement, width);
+        std::cout << "  (0x";
+        printHex(twosComplement, width);
+        std::cout << ")\n";
+    }
+
+    std::cout << "Program ended.\n";
     return 0;
 }
