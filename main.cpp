@@ -76,31 +76,36 @@ bool parseInteger(const char text[], long long& number)
 
 int readWidth()
 {
-    int width = 0;
+    char input[64];
 
-    while (!isSupportedWidth(width))
+    while (true)
     {
-        std::cout << "Choose a bit width (8, 16, or 32): ";
-        std::cin >> width;
+        std::cout << "Choose a bit width (8, 16, or 32), or q to quit: ";
+        std::cin.getline(input, 64);
 
         if (!std::cin)
         {
             std::cin.clear();
             std::cin.ignore(10000, '\n');
-            width = 0;
-        }
-        else
-        {
-            std::cin.ignore(10000, '\n');
+            std::cout << "Input is too long. Please try again.\n";
+            continue;
         }
 
-        if (!isSupportedWidth(width))
+        if ((input[0] == 'q' || input[0] == 'Q') && input[1] == '\0')
         {
-            std::cout << "Please enter 8, 16, or 32.\n";
+            return 0;
         }
+
+        long long width;
+
+        if (parseInteger(input, width) &&
+            isSupportedWidth(static_cast<int>(width)))
+        {
+            return static_cast<int>(width);
+        }
+
+        std::cout << "Please enter 8, 16, 32, or q.\n";
     }
-
-    return width;
 }
 
 int main()
@@ -109,6 +114,13 @@ int main()
     std::cout << "Only integers that fit the selected width are accepted.\n\n";
 
     int width = readWidth();
+
+    if (width == 0)
+    {
+        std::cout << "Program ended.\n";
+        return 0;
+    }
+
     char input[64];
 
     while (true)
@@ -135,6 +147,12 @@ int main()
         if ((input[0] == 'w' || input[0] == 'W') && input[1] == '\0')
         {
             width = readWidth();
+
+            if (width == 0)
+            {
+                break;
+            }
+
             continue;
         }
 
